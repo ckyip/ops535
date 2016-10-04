@@ -4,6 +4,8 @@ Professor : Raymond Chan
 
 By Student: Colin Yip
 
+OPS535 Course Web: https://scs.senecac.on.ca/~raymond.chan/ops535/1603/
+
 ###Scenario:
 
 A Image which serves as a base image (clone source) for assignment and lab is provided.  A URL of the file is given. 
