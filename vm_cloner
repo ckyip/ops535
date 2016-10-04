@@ -1,4 +1,12 @@
 #!/bin/bash
+#
+# Written for: Professor Raymond Chan
+# By Studnet : Colin Yip (OPS535 Lab Assistant)
+#
+# Course: OPS535, SPR 500
+#
+#
+# Automates the cloning of VM for assignment/labs
 
 
 
