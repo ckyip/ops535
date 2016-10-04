@@ -7,7 +7,17 @@ By Student: Colin Yip
 ###Scenario:
 
 A Image which serves as a base image (clone source) for assignment and lab is provided.  A URL of the file is given. 
-Following scripts has been written to automate setting up the VM.
+
+###Purpose:
+
+1. Automate the downloading/updating of base image
+2. Automate cloning of VM off the base image (for lab ans assignments)
+3. Demonstrate the use of "virsh" 
+
+###Requirement:
+
+1. Virtualization: KVM, libvirtd
+2. Run as root user
 
 ###Files:
 
