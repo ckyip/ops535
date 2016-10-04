@@ -2,7 +2,7 @@
 
 Professor : Raymond Chan
 
-By Student: Colin Yip
+By Student: Colin Yip (Lab Assistant)
 
 OPS535 Course Web: https://scs.senecac.on.ca/~raymond.chan/ops535/1603/
 
