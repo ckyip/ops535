@@ -1,0 +1,251 @@
+#!/bin/bash
+
+
+
+function echo_current()
+{
+	echo -e "$colorCURRENT$1$colorRST"
+}
+
+function create_files_array()
+{
+	files=$(ls -l ${image_path}/*.qcow2 | rev | cut -d'/' -f1 | rev)
+	
+	i=0
+	j=1	
+
+	for f in $files
+	do
+		menu[$((i++))]="$((j++))"
+		menu[$((i++))]="$f"
+	done
+}
+
+
+function select_source()
+{
+	source_choice=$(whiptail --title "$title" --menu "Choose Base Image to Clone"\
+			 $dialog_height $dialog_width $menu_height\
+			 "${menu[@]}" 3>&1 1>&2 2>&3)
+	if [ $? -ne 0 ];then
+		exit 0
+	fi
+	source_image="$image_path/${menu[$((source_choice*2-1))]}"
+	current_screen=$((current_screen+1))
+	display_tip_dest_choice
+}
+
+function display_tip_dest_choice
+{
+	whiptail --msgbox "For next screen\n SPACE - Select filename to be created (1 or more) \n TAB - Move to OK/Cancel" $menu_height $dialog_width
+}
+
+function select_dest()
+{
+	dest_choice=$(whiptail --title "$title" --checklist "Source: $source_image" \
+			 $dialog_height $dialog_width $menu_height\
+			 "c7min-pri.qcow2" "OPS535 Primary DNS Server" OFF\
+			 "c7min-rns.qcow2" "OPS535 Root Name Server" OFF\
+			 "c7min-co.qcow2"  "OPS535 Caching-only DNS Server" OFF\
+			 "c7min-ud-pri.qcow2" "SPR500 Primary DNS Server" OFF\
+			 "c7min-ud-rns.qcow2" "SPR500 Root Name Server" OFF\
+			 "c7min-ud-co.qcow2"  "SPR500 Caching-only DNS Server" OFF 3>&1 1>&2 2>&3)
+	if [ $? -ne 0 ]; then
+		current_screen=$((current_screen-1))
+	elif [ "$dest_choice" == "" ]; then
+		display_missing_dest_choice
+	else
+		current_screen=$((current_screen+1))
+	fi
+
+}
+
+function display_missing_dest_choice
+{
+	whiptail --msgbox "Please choose at least one VM to be created" $menu_height $dialog_width
+}
+
+
+function confirm_dest
+{
+	if(whiptail --title "Confirm Selection" --yesno "Copy $source_image \n to $dest_choice" $menu_height $dialog_width);then
+		current_screen=$((current_screen+1))
+	else
+		current_screen=$((current_screen-1))
+	fi
+}
+
+function copy_to_dest()
+{
+	dest_array=($dest_choice)
+
+	source_size=$(ls -l $source_image | cut -d' ' -f5)
+
+	current_count=1
+
+	for file in $dest_choice
+	do
+		dest_file=$(echo $file | sed 's/\"//g')
+
+		overwrite=0
+
+		while [ -f "$image_path/$dest_file" ] && [ $overwrite -eq 0 ]
+		do
+
+			if (whiptail --title "Confirm" --yesno "File: $dest_file already exist.  Overwrite?"  $menu_height $dialog_width);then
+				overwrite=1
+			else
+				dest_file=$(whiptail --title "$dest_file Exist" --inputbox \
+					    "Enter new file name" $menu_height $dialog_width 3>&1 1>&2 2>&3 )
+				if [ $? -ne 0 ]; then
+					dest_file=$(echo $file | sed 's/\"//g')
+				fi
+			fi
+		done
+
+		{ cp $source_image "$image_path/$dest_file"; } &
+		pid=$!
+		
+		{ 
+		while [ ! "$notDone" ] || [ "$notDone" -eq 0 ]
+		do
+			notDone="$(ps $pid > /dev/null; echo $?)"
+			sleep 0.1
+			
+			dest_size=$(ls -l "$image_path/$dest_file" | cut -d' ' -f5)
+			
+			percent=$(echo "scale=2;$dest_size/$source_size*100" | bc | cut -d'.' -f1)
+
+			echo $percent		
+
+		done
+		} |whiptail --gauge "Creating File $current_count of ${#dest_array[*]} : $dest_file" 6 50 0
+	
+		created_files_array+=(["$(echo $file | sed 's/\"//g;s/\.qcow2$//g')"]="$dest_file")
+		
+		current_count=$((current_count+1))
+	done
+
+	current_screen=$((current_screen+1))
+}
+
+function create_network_array()
+{
+        vnetworks=$(virsh net-list | grep active | awk '{print $1}')
+
+
+        for vn in $vnetworks
+        do
+                ip_addr=$(virsh net-dumpxml $vn | grep "ip address" | cut -d'=' -f2 | egrep -o "([0-9]{1,3}\.){3}[0-9]{1,3}")
+                netmask=$(virsh net-dumpxml $vn | grep "ip address" | cut -d'=' -f3 | egrep -o "([0-9]{1,3}\.){3}[0-9]{1,3}")
+
+                for i in {1..4}
+                do
+                        declare octet$i="$(($(echo $ip_addr | cut -d'.' -f$i) & $(echo $netmask | cut -d'.' -f$i)))"
+                done
+
+                networks_array[$vn]="$(echo $octet{1..4} | sed 's/ /\./g')"
+        done
+}
+
+function select_network()
+{
+	checklist_string=""
+        for network in "${!networks_array[@]}"
+        do
+                checklist_string+="$network ${networks_array[$network]} OFF "
+        done
+
+	network_choice=$(whiptail --title "Network Configuration" --checklist "Select Network for $1" \
+        		$dialog_height $dialog_width $menu_height\
+                        $checklist_string 3>&1 1>&2 2>&3)
+}
+
+
+
+function attach_to_vm()
+{
+	for vm in "${!created_files_array[@]}"
+	do
+		valid=0
+		
+		while [ $valid -eq 0 ]
+		do	
+		
+			new_vm=$(whiptail --title "${created_files_array[$vm]}" --inputbox \
+                                            "Enter VM name" $menu_height $dialog_width "$vm" 3>&1 1>&2 2>&3 )
+		
+			status=$(echo "$(virsh list --all | grep -w " $new_vm " | awk '{print$NF}')")
+			
+			if [ "$status" == "" ]; then
+				valid=1
+			else
+			        whiptail --msgbox "VM name $new_vm already exist.  Please enter a different name" $menu_height $dialog_width
+			fi 
+		done
+
+		create_network_array
+		select_network $vm
+
+
+		network_string=""
+		
+		if [ "$network_choice" != "" ];then
+			for choice in $network_choice
+			do
+				network_string+="--network network=$(echo $choice | sed 's/\""//g') "
+			done
+		fi	
+
+		virt-install --name $new_vm \
+			     --ram 1024     \
+			     --vcpu 1       \
+			     --disk path="$image_path/${created_files_array[$vm]}" \
+			     $network_string \
+			     --import --noautoconsole --force
+	
+	
+	done
+	current_screen=$((current_screen+1))
+}
+
+function load_screen
+{
+	case $1 in
+	1) select_source;;
+	2) select_dest;;
+	3) confirm_dest;;
+	4) copy_to_dest;;
+	5) attach_to_vm;;
+	6) exit 0;;
+	esac
+}
+
+image_path="/var/lib/libvirt/images"
+
+
+
+colorCURRENT='\e[7;34m'
+colorRST='\e[0m'
+
+current_screen=1
+title="Create VM for Assignment/Labs"
+
+dialog_height=20
+dialog_width=80
+menu_height=12
+
+source_choice=""
+source_image=""
+dest_choice=""
+network_choice=""
+
+create_files_array
+declare -A created_files_array
+
+declare -A networks_array
+
+while (true)
+do
+	load_screen $current_screen
+done
