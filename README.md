@@ -36,7 +36,9 @@ Updated base image (.qcow2) in /var/lib/libvirt/images
 
 Usage Example:
 
+```
 ./vm_downloader https://scs.senecac.on.ca/~raymond.chan/ops535/asgms/c7min-ops535.qcow2.gz 
+```
 
 Description:
 
@@ -52,7 +54,10 @@ This script does the following:
 Launches a User Interface written using "whiptail".
 
 Usage Example:
+
+```
 ./vm_cloner
+```
 
 Description:
 
