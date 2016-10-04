@@ -1,0 +1,317 @@
+#!/bin/bash
+#
+# Written for: Professor Raymond Chan
+# By Studnet : Colin Yip (OPS535 Lab Assistant)
+#
+# Course: OPS535, SPR 500
+#
+#
+# Automate the downloading of VM image
+# (Optionally automatic perform yum update)
+ 
+
+clear
+
+URL=$1
+
+
+colorFAIL='\e[1;31m'
+colorPASS='\e[1;34m'
+colorRST='\e[0m'
+
+columnWidth=15
+
+
+function echo_pass()
+{
+	echo -e "$colorPASS$1$colorRST"
+}
+
+function echo_fail()
+{
+	echo -e "$colorFAIL$1$colorRST"
+}
+
+function echo_align()
+{
+	printf "%-${columnWidth}s" "$1"
+	printf "... "
+}
+
+function remove_and_exit()
+{
+	rm -rf $tempFOLDER
+	echo_fail $1
+	exit 1
+}
+
+# Check if current user is root
+
+[ $(id -u) != 0 ] && echo_fail "Error: You must be root to execute this script" && exit 1
+
+
+
+echo ""
+
+# Checks if URL is valid
+
+echo_align "URL Valid"
+
+
+HTTP_RESPONSE=$(curl -Is "$URL" | head -1 | cut -d' ' -f2)
+
+[ "$HTTP_RESPONSE" == "200" ] && echo_pass "OK" || { echo_fail "ERROR";exit 1; }
+
+
+# Attempts to create temp folder for download
+
+echo_align "Temp Folder"
+
+tempFOLDER=$(mktemp -d)
+
+[ "$?" -eq "0" ] && echo_pass "$tempFOLDER" || { echo_fail "Unable to create";exit 1; }
+
+
+
+# Attempts to download target image file
+
+echo "Downloading"
+
+echo ""
+
+wget $URL --directory-prefix="$tempFOLDER"
+
+echo ""
+
+[ "$?" -eq "0" ] && echo_pass "OK" || remove_and_exit "ERROR" 
+
+
+file_name=$(echo $1 | rev | cut -d'/' -f1 | rev)
+file_extension=$(echo $file_name | rev | cut -d'.' -f1 | rev)
+
+# Attempts to download MD5
+
+CHECK_MD5=0
+
+echo_align "Downloading MD5"
+
+wget -q $URL.md5 --directory-prefix="$tempFOLDER"
+
+[ "$?" -eq "0" ] && { echo_pass "OK";CHECK_MD5=1; } || echo_fail "NOT FOUND"
+
+
+# CHECK MD5 (if MD5 exist)
+
+echo_align "MD5 Available"
+
+if [ $CHECK_MD5 -eq 1 ]; then
+	echo_pass "YES"	
+elif [ $CHECK_MD5 -eq 0 ]; then
+	echo_fail "NO"
+fi
+
+
+if [ $CHECK_MD5 -eq 1 ]; then
+
+echo_align "CHECKING MD5"
+sed "s|[^ ]*$|${tempFOLDER}\/&|" "$tempFOLDER/${file_name}.md5" | md5sum -c 2>&1 > /dev/null
+
+[ "$?" -eq "0" ] && echo_pass "OK" || remove_and_exit "ERROR"
+
+fi
+
+# Decompress .gz files
+
+[ "$file_extension" == "gz" ] && echo_align "Decompressing" && gunzip "$tempFOLDER/$file_name"
+
+[ "$?" -eq "0" ] && echo_pass "OK" || remove_and_exit "FAILED" 
+
+# Confirm uncompressed MD5 (if original file is .gz)
+
+if [ "$file_extension" == "gz" ]; then
+
+CHECK_MD5=0
+
+echo_align "Downloading MD5"
+
+echo $URL | sed 's/\.gz/.md5/' | xargs wget -q --directory-prefix="$tempFOLDER"
+
+[ "$?" -eq "0" ] && { echo_pass "OK";CHECK_MD5=1; } || echo_fail "NOT FOUND"
+
+uncompressed_file_name=$(echo $file_name | sed 's/.gz//')
+
+fi
+
+if [ $CHECK_MD5 -eq 1 ]; then
+
+
+echo_align "CHECKING MD5"
+sed "s|[^ ]*$|${tempFOLDER}\/&|" "$tempFOLDER/${uncompressed_file_name}.md5" | md5sum -c 2>&1 > /dev/null
+
+[ "$?" -eq "0" ] && echo_pass "OK" || remove_and_exit "FAILED"
+
+fi
+
+if [ "$file_extension" == "gz" ]; then
+	image_file_name=$uncompressed_file_name
+elif [ "$file_extension" == "qcow2" ]; then
+	image_file_name=$file_name
+else
+	remove_and_exit "Unsupported image type"
+fi
+
+
+# Copy uncompressed image file from /tmp to /var/lib/libvirt/images
+# If filename already exist, prompt user for new name
+
+image_path='/var/lib/libvirt/images'
+
+dest_image_file_name=$image_file_name
+
+if [ -w $image_path ]; then
+	while [ -f "$image_path/$dest_image_file_name" ]
+	do
+		echo ""
+		echo "File $image_filename already exist"
+		ls -l "$image_path/$dest_image_file_name"
+		echo -n "Enter new name:"
+		read dest_image_file_name
+		echo ""
+	done
+	echo_align "Moving image file"
+	mv "$tempFOLDER/$image_file_name" "$image_path/$dest_image_file_name"
+	[ "$?" -eq "0" ] && echo_pass "OK" || echo_fail "FAILED"
+else
+	remove_and_exit "Unable to write to $image_path"
+fi
+
+# Remove Temp Folder
+
+echo_align "Removing temp folder"
+rm -rf $tempFOLDER
+[ "$?" -eq "0" ] && echo_pass "OK" || echo_fail "Unable to remove folder"
+
+
+echo "Result:"
+echo ""
+ls -l $image_path/$dest_image_file_name
+echo ""
+echo ""
+
+echo " Yum Update Above Image File?"
+echo -n " -- Enter $(echo_pass 'yes') to proceed: "
+read continue
+
+continue=$(echo $continue | tr 'A-Z' 'a-z')
+
+if [ "$continue" != "yes" ] && [ "$continue" != "y" ]; then
+	exit 0
+fi
+
+# Attemp to run yum update on base image by
+# attaching image to a temporary VM
+
+echo "==================="
+echo "Updating Base Image"
+echo "==================="
+
+
+# Find a Virtual Network w/DHCP & NAT
+
+echo_align "Virtual Network w/ NAT"
+
+
+vnets=$(virsh net-list | grep " active " | awk '{print $1}')
+
+
+for net in $vnets
+do
+        if (virsh net-dumpxml $net | grep -q "<dhcp>"); then
+                nat_network=$net
+		break
+        fi
+done
+
+
+[ ${#nat_network[@]} -ne 1 ] && echo_fail "Not Available" && exit 1 || echo_pass "$nat_network"
+
+
+# Create a temporary VM to run base image
+
+# if VM name is taken, generate a random name
+
+temp_vm_name="temp"
+
+while ( virsh list --all | grep -q " $temp_vm_name " )
+do
+        temp_vm_name="$temp_vm_name$RANDOM"
+done
+
+
+echo_align "Create VM to run base image"
+virt-install --name=$temp_vm_name --file=$image_path/$dest_image_file_name \
+		--vcpu=1 --ram=1024 \
+		--network network=$nat_network --noautoconsole --import
+[ $? -ne 0 ] && echo_fail "FAILED" && exit 1 || echo_pass "OK"
+
+
+echo_align "VM IP Address"
+
+dhcp_addr=$(virsh domifaddr $temp_vm_name 2> /dev/null | grep "ipv4" | awk '{print $NF}' | cut -d'/' -f1)
+
+while [ "$dhcp_addr" == "" ]
+do
+        dhcp_addr=$(virsh domifaddr $temp_vm_name 2> /dev/null | grep "ipv4" | awk '{print $NF}' | cut -d'/' -f1)
+done
+
+echo $dhcp_addr
+
+# Obtain root password from user for VM
+
+password_valid=0
+
+while [ $password_valid -eq 0 ]
+do
+
+echo -n "Enter Root Password: "
+read -s password
+echo
+
+sshpass -p$password ssh -o StrictHostKeyChecking=no root@$dhcp_addr 'exit'
+[ $? -eq 0 ] && echo "Correct Password" && password_valid=1 || echo "Wrong Password"
+
+done
+
+echo ""
+
+
+# Attempt to yum update using provided credential
+
+# clear yum repolist
+
+echo "$dhcp_addr > yum clean all"
+sshpass -p$password ssh -o StrictHostKeyChecking=no root@$dhcp_addr 'yum clean all'
+[ $? -eq 0 ] && echo_pass "OK" || { echo_fail "FAILED"; exit 1; }
+
+# rebuild repolist
+
+echo "$dhcp_addr > yum repolist"
+sshpass -p$password ssh -o StrictHostKeyChecking=no root@$dhcp_addr 'yum repolist'
+[ $? -eq 0 ] && echo_pass "OK" || { echo_fail "FAILED"; exit 1; }
+
+
+# perform yum update
+
+echo "$dhcp_addr > yum update -y"
+sshpass -p$password ssh -o StrictHostKeyChecking=no root@$dhcp_addr 'yum update -y'
+[ $? -eq 0 ] && echo_pass "OK" || { echo_fail "FAILED"; exit 1; }
+
+
+echo_align "Removing VM"
+virsh destroy $temp_vm_name
+virsh undefine $temp_vm_name
+[ $? -ne 0 ] && echo_fail "Unable to remove VM" && exit 1 || echo_pass "OK"
+echo ""
+echo "=========== Update Completed  ================"
+ls -l $image_path/$dest_image_file_name
+
