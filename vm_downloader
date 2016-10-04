@@ -303,7 +303,7 @@ sshpass -p$password ssh -o StrictHostKeyChecking=no root@$dhcp_addr 'yum repolis
 # perform yum update
 
 echo "$dhcp_addr > yum update -y"
-sshpass -p$password ssh -o StrictHostKeyChecking=no root@$dhcp_addr 'yum update -y && poweroff'
+sshpass -p$password ssh -o StrictHostKeyChecking=no root@$dhcp_addr 'yum update -y'
 [ $? -eq 0 ] && echo_pass "OK" || { echo_fail "FAILED"; exit 1; }
 
 
@@ -311,6 +311,7 @@ echo_align "Removing VM"
 #virsh destroy $temp_vm_name # force shutdown immediately 
 			     # after kernel update causes kernel panic after reboot
                              # use virsh shutdown instead or poweroff(ssh)
+virsh shutdown $temp_vm_name
 virsh undefine $temp_vm_name
 [ $? -ne 0 ] && echo_fail "Unable to remove VM" && exit 1 || echo_pass "OK"
 echo ""
