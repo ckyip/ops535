@@ -226,7 +226,7 @@ vnets=$(virsh net-list | grep " active " | awk '{print $1}')
 
 for net in $vnets
 do
-        if [ $(virsh net-dumpxml abc_network | egrep -c "(<dhcp>|<nat>)") -eq 2 ]; then
+        if [ $(virsh net-dumpxml $net | egrep -c "(<dhcp>|<nat>)") -eq 2 ]; then
                 nat_network=$net
 		break
         fi
