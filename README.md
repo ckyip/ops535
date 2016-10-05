@@ -13,7 +13,7 @@ A Image which serves as a base image (clone source) for assignment and lab is pr
 ###Purpose:
 
 1. Automate the downloading/updating of base image
-2. Automate cloning of VM off the base image (for lab ans assignments)
+2. Automate cloning of VM off the base image (for lab and assignments)
 3. Demonstrate the use of "virsh" 
 
 ###Requirement:
