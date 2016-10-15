@@ -62,7 +62,7 @@ function ensure_package_installed()
                 	exit 1
         	else
                 	echo_align "Installing '$1'"
-                	if ( yum install -y sshpass ); then
+                	if ( yum install -y $1 ); then
                         	echo_pass "OK"
                 	else
                         	echo_fail "FAILED"
@@ -200,7 +200,7 @@ if [ -w $image_path ]; then
 	while [ -f "$image_path/$dest_image_file_name" ]
 	do
 		echo ""
-		echo "File $image_filename already exist"
+		echo "File $image_file_name already exist"
 		ls -l "$image_path/$dest_image_file_name"
 		echo -n "Enter new name:"
 		read dest_image_file_name
@@ -295,6 +295,12 @@ done
 echo $dhcp_addr
 
 
+# Ensure epel repo is installed so that sshpass can be installed
+
+if ( ! rpm -qi "sshpass" ); then
+	ensure_package_installed "epel-release"
+fi
+
 # Ensure required package 'sshpass' is installed before continuing
 
 ensure_package_installed "sshpass"
@@ -307,7 +313,7 @@ password_valid=0
 while [ $password_valid -eq 0 ]
 do
 
-echo -n "Enter Root Password: "
+echo -n "Enter ${dest_image_file_name}'s  Root Password: "
 read -s password
 echo
 
