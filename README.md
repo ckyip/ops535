@@ -18,13 +18,36 @@ A Image which serves as a base image (clone source) for assignment and lab is pr
 
 ###Requirement:
 
-1. Virtualization: KVM, libvirtd
+1. Virtualization: KVM, libvirtd, sshpass
 2. Run as root user
 
 ###Files:
 
 ####vm_downloader: Automate downloading and updating of a provided base image (pre-cloning prep)
 ####vm_cloner    : Make copies of a given base image file (.qcow2) and attach each to a VM
+
+
+###Download
+
+#### wget:
+
+```
+wget https://raw.githubusercontent.com/ckyip/ops535/master/vm_cloner
+wget https://raw.githubusercontent.com/ckyip/ops535/master/vm_downloader
+```
+
+#### Zip File:
+
+```
+https://github.com/ckyip/ops535/archive/master.zip
+```
+
+#### git:
+
+```
+git clone https://github.com/ckyip/ops535.git
+```
+
 
 # vm_downloader
 
