@@ -45,6 +45,34 @@ function remove_and_exit()
 	exit 1
 }
 
+function ensure_package_installed()
+{
+	local package=$1
+
+	if ( ! rpm -qi $1 > /dev/null 2>&1 ); then
+        	echo "$1 is not installed."
+        	echo -n " -- Enter $(echo_pass 'yes') to install $1 or program will be $(echo_fail 'terminated'): "
+        	read continue
+        	continue=$(echo $continue | tr 'A-Z' 'a-z')
+
+        	if [ "$continue" != "yes" ] && [ "$continue" != "y" ]; then
+                	echo ""
+                	echo_fail "Program was terminated due to missing package"
+                	echo""
+                	exit 1
+        	else
+                	echo_align "Installing '$1'"
+                	if ( yum install -y sshpass ); then
+                        	echo_pass "OK"
+                	else
+                        	echo_fail "FAILED"
+                        	exit 1
+                	fi
+        	fi
+	fi
+}
+
+
 # Check if current user is root
 
 [ $(id -u) != 0 ] && echo_fail "Error: You must be root to execute this script" && exit 1
@@ -265,6 +293,12 @@ do
 done
 
 echo $dhcp_addr
+
+
+# Ensure required package 'sshpass' is installed before continuing
+
+ensure_package_installed "sshpass"
+
 
 # Obtain root password from user for VM
 
