@@ -23,8 +23,8 @@ A Image which serves as a base image (clone source) for assignment and lab is pr
 
 ###Files:
 
-##vm_downloader: Automate downloading and updating of a provided base image (pre-cloning prep)
-##vm_cloner    : Make copies of a given base image file (.qcow2) and attach each to a VM
+#####vm_downloader: Automate downloading and updating of a provided base image (pre-cloning prep)
+#####vm_cloner    : Make copies of a given base image file (.qcow2) and attach each to a VM
 
 
 ###Download
