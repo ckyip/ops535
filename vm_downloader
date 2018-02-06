@@ -123,7 +123,7 @@ CHECK_MD5=0
 
 echo_align "Downloading MD5"
 
-wget -q $URL.md5 --directory-prefix="$tempFOLDER"
+wget -q $URL.md5 --directory-prefix="$tempFOLDER" --max-redirect 0
 
 [ "$?" -eq "0" ] && { echo_pass "OK";CHECK_MD5=1; } || echo_fail "NOT FOUND"
 
@@ -162,7 +162,7 @@ CHECK_MD5=0
 
 echo_align "Downloading MD5"
 
-echo $URL | sed 's/\.gz/.md5/' | xargs wget -q --directory-prefix="$tempFOLDER"
+echo $URL | sed 's/\.gz/.md5/' | xargs wget -q --directory-prefix="$tempFOLDER" --max-redirect 0
 
 [ "$?" -eq "0" ] && { echo_pass "OK";CHECK_MD5=1; } || echo_fail "NOT FOUND"
 
